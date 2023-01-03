@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: jaeger
+  name: jaeger
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jaeger
+  template:
+    metadata:
+      labels:
+        app: jaeger
+    spec:
+      containers:
+        - image: jaegertracing/opentelemetry-all-in-one:latest
+          name: opentelemetry-all-in-one
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: jaeger
+  name: jaeger
+spec:
+  ports:
+    - name: grpc
+      port: 4317
+      targetPort: 4317
+    - name: ui
+      port: 16686
+      targetPort: 16686
+  selector:
+    app: jaeger
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: grpc-server
+  name: grpc-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grpc-server
+  template:
+    metadata:
+      labels:
+        app: grpc-server
+    spec:
+      shareProcessNamespace: true
+      initContainers:
+        - name: copy-launcher
+          image: keyval/launcher:v0.1
+          command:
+            - cp
+            - -a
+            - /kv-launcher/.
+            - /odigos-launcher/
+          volumeMounts:
+            - name: launcherdir
+              mountPath: /odigos-launcher
+      containers:
+        - image: edenfed/grpc-server@sha256:5a1ab36083842d7c808984e16394e7b800709ec38fbed1e66658fdebde07e858
+          imagePullPolicy: IfNotPresent
+          name: grpc-server
+          command:
+            - /odigos-launcher/launch
+            - /root/app
+          volumeMounts:
+            - mountPath: /odigos-launcher
+              name: launcherdir
+          ports:
+            - containerPort: 50051
+              protocol: TCP
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          env:
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+        - name: grpc-instrumentation
+          image: keyval/otel-go-agent:v0.6.0
+          env:
+            - name: OTEL_TARGET_EXE
+              value: /root/app
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "jaeger:4317"
+            - name: OTEL_SERVICE_NAME
+              value: "hello-grpc"
+          securityContext:
+            runAsUser: 0
+            capabilities:
+              add:
+                - SYS_PTRACE
+            privileged: true
+          volumeMounts:
+            - mountPath: /sys/kernel/debug
+              name: kernel-debug
+      volumes:
+        - name: launcherdir
+          emptyDir: {}
+        - name: kernel-debug
+          hostPath:
+            path: /sys/kernel/debug
