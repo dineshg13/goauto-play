@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package hellopb;
+
+option go_package = "protos/hellopb";
+import "google/protobuf/timestamp.proto";
+
+service GreetingService {
+    rpc Hello (HelloRequest) returns (HelloResponse);
+}
+
+message HelloRequest {
+    int64 id = 1;
+    Person person = 2;
+}
+
+
+message Person {
+    string name = 1;
+    int32 id = 2; // Unique ID number for this person.
+    string email = 3;
+
+    enum PhoneType {
+        MOBILE = 0;
+        HOME = 1;
+        WORK = 2;
+    }
+    message PhoneNumber {
+        string number = 1;
+        PhoneType type = 2;
+    }
+
+    repeated PhoneNumber phones = 4;
+    google.protobuf.Timestamp last_updated = 5;
+}
+enum Code {
+    OK = 0;
+    UNKNOWN = 1;
+    BAD_REQUEST = 2;
+    BAD_NAME = 3;
+}
+message HelloResponse {
+
+    Code code = 1;
+    string error_message = 2;
+    string response_message = 3;
+
+}
+
